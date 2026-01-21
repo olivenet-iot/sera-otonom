@@ -266,6 +266,22 @@ class SeraBrain:
         Returns:
             Döngü sonucu (decision, thoughts, actions)
         """
+        # Check mode before proceeding
+        try:
+            device_states = self.state_manager.read("device_states")
+            mode = device_states.get("mode", {}).get("current", "auto")
+            if mode != "auto":
+                logger.info(f"Cycle skipped - mode is {mode}")
+                return {
+                    "cycle_id": f"skipped_{datetime.now().strftime('%H%M%S')}",
+                    "timestamp": datetime.utcnow().isoformat() + "Z",
+                    "success": True,
+                    "skipped": True,
+                    "reason": f"Mode is {mode}"
+                }
+        except Exception as e:
+            logger.warning(f"Could not check mode: {e}")
+
         self._cycle_count += 1
         cycle_id = f"cycle_{self._cycle_count}_{datetime.now().strftime('%H%M%S')}"
 

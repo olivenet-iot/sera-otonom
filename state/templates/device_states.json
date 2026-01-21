@@ -1,5 +1,12 @@
 {
   "timestamp": null,
+  "mode": {
+    "current": "auto",
+    "previous": null,
+    "changed_at": null,
+    "changed_by": null,
+    "reason": null
+  },
   "devices": {
     "pump_01": {
       "state": "off",
