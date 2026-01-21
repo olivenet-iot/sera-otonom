@@ -5,11 +5,17 @@ FastAPI backend for AI Brain Monitoring Panel
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
 from datetime import datetime
+from pathlib import Path
 import logging
 
 from .schemas import HealthResponse, InfoResponse, BrainMode
+
+# Frontend directory path
+FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
 from .routes import brain, control
 from .dependencies import get_brain_instance, get_current_mode
 
@@ -72,3 +78,17 @@ async def get_info():
         brain_status="running" if brain and brain.is_running else "stopped",
         mode=BrainMode(get_current_mode())
     )
+
+
+# Mount static files for frontend
+if FRONTEND_DIR.exists():
+    app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
+
+
+@app.get("/", include_in_schema=False)
+async def serve_frontend():
+    """Serve the frontend index.html at root"""
+    index_path = FRONTEND_DIR / "index.html"
+    if index_path.exists():
+        return FileResponse(index_path)
+    return {"message": "Frontend not found. API is running at /api"}

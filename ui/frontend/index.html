@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sera Otonom - AI Brain Panel</title>
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="/static/styles.css">
+
+    <!-- Favicon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌱</text></svg>">
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+    <!-- Toast Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Header -->
+    <header class="bg-gray-800 border-b border-gray-700 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <!-- Logo & Title -->
+                <div class="flex items-center gap-3">
+                    <span class="text-3xl">🌱</span>
+                    <div>
+                        <h1 class="text-xl font-bold text-white">Sera Otonom</h1>
+                        <p class="text-sm text-gray-400">AI Brain Monitoring Panel</p>
+                    </div>
+                </div>
+
+                <!-- Status & Mode -->
+                <div class="flex items-center gap-6">
+                    <!-- Status Indicator -->
+                    <div class="flex items-center gap-2">
+                        <span id="status-dot" class="status-dot stopped"></span>
+                        <span id="status-text" class="text-sm text-gray-300">Baglaniyor...</span>
+                    </div>
+
+                    <!-- Mode Selector -->
+                    <div class="flex items-center gap-2">
+                        <label for="mode-select" class="text-sm text-gray-400">Mod:</label>
+                        <select id="mode-select" class="select-input" onchange="handleModeChange(event)">
+                            <option value="auto">Otomatik</option>
+                            <option value="manual">Manuel</option>
+                            <option value="paused">Duraklatildi</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 py-6">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- Left Column: AI Status & Devices -->
+            <div class="lg:col-span-1 space-y-6">
+
+                <!-- AI Status Card -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>🧠 AI Durumu</h2>
+                        <span id="last-update" class="text-xs text-gray-500">-</span>
+                    </div>
+                    <div class="card-body space-y-4">
+                        <!-- Last Thought -->
+                        <div>
+                            <label class="text-xs text-gray-500 uppercase tracking-wide">Son Dusunce</label>
+                            <p id="last-thought" class="text-sm text-gray-300 mt-1">Yukleniyor...</p>
+                        </div>
+
+                        <!-- Confidence -->
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <label class="text-xs text-gray-500 uppercase tracking-wide">Guven Seviyesi</label>
+                                <span id="confidence-value" class="text-sm font-medium text-gray-300">%0</span>
+                            </div>
+                            <div class="confidence-bar">
+                                <div id="confidence-fill" class="confidence-fill" style="width: 0%"></div>
+                            </div>
+                        </div>
+
+                        <!-- Cycle Count -->
+                        <div class="flex items-center justify-between pt-2 border-t border-gray-700">
+                            <span class="text-xs text-gray-500">Toplam Dongu</span>
+                            <span id="cycle-count" class="text-lg font-bold text-blue-400">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Device Control Card -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>🎛️ Cihaz Kontrolu</h2>
+                    </div>
+                    <div class="card-body">
+                        <div id="devices-container">
+                            <div class="empty-state">
+                                <div class="empty-state-icon">⏳</div>
+                                <p class="empty-state-text">Yukleniyor...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Decisions & Ask AI -->
+            <div class="lg:col-span-2 space-y-6">
+
+                <!-- Decision History Card -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>📋 Karar Gecmisi</h2>
+                        <button class="btn btn-sm btn-secondary" onclick="refreshDecisions()">
+                            🔄 Yenile
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div id="decisions-container" style="max-height: 400px; overflow-y: auto;">
+                            <div class="empty-state">
+                                <div class="empty-state-icon">⏳</div>
+                                <p class="empty-state-text">Yukleniyor...</p>
+                            </div>
+                        </div>
+                        <div id="decisions-pagination" class="pagination"></div>
+                    </div>
+                </div>
+
+                <!-- Ask AI Card -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>💬 AI'ya Sor</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="flex gap-3 mb-4">
+                            <input
+                                type="text"
+                                id="ai-question"
+                                class="text-input flex-1"
+                                placeholder="Seranin durumu hakkinda bir soru sorun..."
+                            >
+                            <button id="ask-btn" class="btn btn-primary" onclick="askAI()">
+                                Sor
+                            </button>
+                        </div>
+                        <div id="ai-response">
+                            <div class="text-muted text-sm text-center py-4">
+                                AI'ya sera hakkinda sorular sorabilirsiniz.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-gray-800 mt-8">
+        <div class="max-w-7xl mx-auto px-4 py-4">
+            <div class="flex items-center justify-between text-sm text-gray-500">
+                <span>Sera Otonom v0.1.0</span>
+                <span>AI-Powered Greenhouse Automation</span>
+            </div>
+        </div>
+    </footer>
+
+    <!-- JavaScript -->
+    <script src="/static/app.js"></script>
+</body>
+</html>
