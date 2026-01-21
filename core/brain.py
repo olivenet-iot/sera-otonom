@@ -11,7 +11,7 @@ Bu modül tüm sistemi koordine eder:
 import logging
 import asyncio
 import uuid
-from typing import Optional
+from typing import Optional, Dict, Any
 from datetime import datetime
 from pathlib import Path
 
@@ -20,6 +20,7 @@ from .scheduler import SeraScheduler, TaskStatus
 from .data_collector import DataCollector
 from utils.state_manager import get_state_manager
 from utils.config_loader import get_config_loader
+from actions import ActionExecutor, RelayController
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +74,8 @@ class SeraBrain:
         self.scheduler: Optional[SeraScheduler] = None
         self.claude_runner: Optional[ClaudeRunner] = None
         self.fallback_maker: Optional[FallbackDecisionMaker] = None
+        self.relay_controller: Optional[RelayController] = None
+        self.executor: Optional[ActionExecutor] = None
 
         # State
         self.is_running = False
@@ -125,6 +128,22 @@ class SeraBrain:
         if self.use_fallback:
             self.fallback_maker = FallbackDecisionMaker(self.thresholds)
 
+        # Initialize RelayController and ActionExecutor
+        try:
+            device_config = self.config_loader.load("devices")
+        except FileNotFoundError:
+            logger.warning("devices.yaml not found, using empty config")
+            device_config = {}
+
+        # Get MQTT connector from DataCollector if available
+        mqtt_connector = None
+        if self.data_collector and hasattr(self.data_collector, 'mqtt'):
+            mqtt_connector = self.data_collector.mqtt
+
+        self.relay_controller = RelayController(mqtt_connector, device_config)
+        self.executor = ActionExecutor(self.relay_controller, device_config)
+        logger.info("RelayController and ActionExecutor initialized")
+
         # Initialize Scheduler
         self.scheduler = SeraScheduler(default_interval_seconds=self.cycle_interval)
         self._setup_scheduled_tasks()
@@ -153,6 +172,14 @@ class SeraBrain:
             callback=self._update_weather,
             interval_seconds=weather_interval,
             run_immediately=True  # Başlangıçta hemen çalıştır
+        )
+
+        # Executor cycle - her 30 saniyede bir pending actions işle
+        self.scheduler.add_task(
+            name="executor_cycle",
+            callback=self._run_executor_cycle,
+            interval_seconds=30,
+            run_immediately=False
         )
 
         logger.info("Scheduled tasks configured")
@@ -184,6 +211,10 @@ class SeraBrain:
         # Scheduler'ı durdur
         if self.scheduler:
             await self.scheduler.stop()
+
+        # RelayController'ı kapat
+        if self.relay_controller:
+            await self.relay_controller.shutdown()
 
         # Data collector'ı kapat
         if self.data_collector:
@@ -397,6 +428,41 @@ class SeraBrain:
             return await self.data_collector.update_weather()
         return {"error": "DataCollector not initialized"}
 
+    async def _run_executor_cycle(self) -> Dict[str, Any]:
+        """
+        Executor döngüsü - pending actions işle
+
+        Returns:
+            İşlem sonucu
+        """
+        result = {
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "processed": 0,
+            "shutoffs": []
+        }
+
+        if not self.executor:
+            logger.warning("Executor not initialized")
+            return result
+
+        try:
+            # Process pending actions
+            results = await self.executor.process_pending_actions()
+            result["processed"] = len(results)
+
+            # Check scheduled shutoffs
+            shutoffs = await self.executor.check_scheduled_shutoffs()
+            result["shutoffs"] = shutoffs
+
+            if results or shutoffs:
+                logger.info(f"Executor cycle: {len(results)} actions processed, {len(shutoffs)} shutoffs triggered")
+
+        except Exception as e:
+            logger.error(f"Executor cycle error: {e}")
+            result["error"] = str(e)
+
+        return result
+
     async def trigger_cycle(self) -> dict:
         """
         Manuel döngü tetikle
@@ -435,6 +501,10 @@ class SeraBrain:
         if self.data_collector:
             status["mqtt"] = self.data_collector.get_mqtt_status()
             status["weather"] = self.data_collector.get_weather_status()
+
+        if self.executor:
+            status["executor"] = self.executor.get_stats()
+            status["pending_actions"] = self.executor.get_pending_count()
 
         return status
 
