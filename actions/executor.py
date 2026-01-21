@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from utils.state_manager import get_state_manager
+from utils.config_loader import get_config_loader
 from .relay_control import RelayController, RelayCommandResult
 
 logger = logging.getLogger(__name__)
@@ -68,7 +69,82 @@ class ActionExecutor:
         # Statistics
         self.stats = ExecutorStats()
 
+        # Load interval config
+        self._load_interval_config()
+
         logger.info("ActionExecutor initialized")
+
+    def _load_interval_config(self) -> None:
+        """Load action interval configuration from thresholds.yaml"""
+        try:
+            config_loader = get_config_loader()
+            thresholds = config_loader.load("thresholds")
+            self.interval_config = thresholds.get("action_intervals", {})
+        except Exception as e:
+            logger.warning(f"Could not load interval config: {e}, using defaults")
+            self.interval_config = {}
+
+        self.default_intervals = self.interval_config.get("defaults", {
+            "pump": 15, "fan": 10, "default": 15
+        })
+
+    def _get_device_interval_minutes(self, device_id: str) -> int:
+        """Get minimum interval for device in minutes"""
+        if device_id in self.interval_config:
+            return self.interval_config[device_id]
+        device_type = device_id.split("_")[0] if "_" in device_id else device_id
+        return self.default_intervals.get(device_type, self.default_intervals.get("default", 15))
+
+    def _is_on_action(self, action_type: str) -> bool:
+        """Check if action is ON type"""
+        return action_type.endswith("_on")
+
+    def _check_action_interval(self, device_id: str, action_type: str) -> tuple:
+        """
+        Check if action interval is met
+        Returns: (is_allowed: bool, skip_reason: Optional[str])
+        """
+        # OFF aksiyonları HER ZAMAN izin verilir (güvenlik)
+        if not self._is_on_action(action_type):
+            return (True, None)
+
+        try:
+            device_states = self.state_manager.read("device_states")
+            device_state = device_states.get("devices", {}).get(device_id, {})
+        except Exception as e:
+            logger.error(f"Error reading state for interval check: {e}")
+            return (True, None)  # fail-open
+
+        last_on_time_str = device_state.get("last_on_action_time")
+        if not last_on_time_str:
+            logger.debug(f"First ON action for {device_id}, allowing")
+            return (True, None)  # İlk aksiyon
+
+        try:
+            last_on_time = datetime.fromisoformat(last_on_time_str.replace("Z", "+00:00"))
+            now = datetime.utcnow().replace(tzinfo=last_on_time.tzinfo)
+            elapsed_minutes = (now - last_on_time).total_seconds() / 60
+            required = self._get_device_interval_minutes(device_id)
+
+            if elapsed_minutes >= required:
+                return (True, None)
+
+            remaining = required - elapsed_minutes
+            reason = f"Interval not met: {elapsed_minutes:.1f}m elapsed, requires {required}m (wait {remaining:.1f}m)"
+            return (False, reason)
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Invalid last_on_action_time: {e}")
+            return (True, None)  # fail-open
+
+    def _update_last_on_action_time(self, device_id: str) -> None:
+        """Update last ON action time for device"""
+        try:
+            device_states = self.state_manager.read("device_states")
+            if device_id in device_states.get("devices", {}):
+                device_states["devices"][device_id]["last_on_action_time"] = datetime.utcnow().isoformat() + "Z"
+                self.state_manager.write("device_states", device_states)
+        except Exception as e:
+            logger.error(f"Failed to update last_on_action_time: {e}")
 
     async def process_pending_actions(self) -> List[ActionResult]:
         """
@@ -126,6 +202,21 @@ class ActionExecutor:
         device_id = action.get("device")
 
         logger.debug(f"Processing action {action_id}: {action_type} for {device_id}")
+
+        # Interval check for ON actions
+        if device_id and self._is_on_action(action_type):
+            is_allowed, skip_reason = self._check_action_interval(device_id, action_type)
+            if not is_allowed:
+                logger.warning(f"Action {action_id} SKIPPED for {device_id}: {skip_reason}")
+                self._update_action_status(action_id, ActionStatus.SKIPPED, error=skip_reason)
+                self._remove_action(action_id)
+                return ActionResult(
+                    action_id=action_id,
+                    status=ActionStatus.SKIPPED,
+                    device_id=device_id,
+                    command=action_type,
+                    error=skip_reason
+                )
 
         # Update status to executing
         self._update_action_status(action_id, ActionStatus.EXECUTING)
@@ -214,11 +305,17 @@ class ActionExecutor:
         duration = action.get("duration_minutes")
         reason = action.get("reason", "executor_triggered")
 
-        return await self.relay_controller.turn_on(
+        result = await self.relay_controller.turn_on(
             device_id=device_id,
             duration_minutes=duration,
             reason=reason
         )
+
+        # Update last ON action time on success
+        if result.success:
+            self._update_last_on_action_time(device_id)
+
+        return result
 
     async def _execute_pump_off(self, action: Dict[str, Any]) -> RelayCommandResult:
         """Pump kapatma komutu"""
@@ -236,11 +333,17 @@ class ActionExecutor:
         duration = action.get("duration_minutes")
         reason = action.get("reason", "executor_triggered")
 
-        return await self.relay_controller.turn_on(
+        result = await self.relay_controller.turn_on(
             device_id=device_id,
             duration_minutes=duration,
             reason=reason
         )
+
+        # Update last ON action time on success
+        if result.success:
+            self._update_last_on_action_time(device_id)
+
+        return result
 
     async def _execute_fan_off(self, action: Dict[str, Any]) -> RelayCommandResult:
         """Fan kapatma komutu"""

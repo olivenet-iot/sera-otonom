@@ -536,5 +536,191 @@ class TestExecutorIntegration:
             await controller.shutdown()
 
 
+# ==================== Action Interval Tests ====================
+
+class TestActionIntervalCheck:
+    """Action interval check testleri"""
+
+    @pytest.fixture
+    def device_config(self):
+        return {
+            "relays": {
+                "pump_01": {"max_on_duration_minutes": 60},
+                "fan_01": {"max_on_duration_minutes": 120}
+            }
+        }
+
+    @pytest.fixture
+    def mock_relay_controller(self):
+        controller = Mock(spec=RelayController)
+        controller.turn_on = AsyncMock(return_value=RelayCommandResult(
+            success=True,
+            device_id="pump_01",
+            command="on"
+        ))
+        controller.turn_off = AsyncMock(return_value=RelayCommandResult(
+            success=True,
+            device_id="pump_01",
+            command="off"
+        ))
+        return controller
+
+    @pytest.fixture
+    def executor(self, mock_relay_controller, device_config):
+        with patch('actions.executor.get_state_manager') as mock_sm, \
+             patch('actions.executor.get_config_loader') as mock_cfg:
+            mock_sm.return_value.read.return_value = {
+                "devices": {
+                    "pump_01": {"state": "off", "last_on_action_time": None},
+                    "fan_01": {"state": "off", "last_on_action_time": None}
+                },
+                "pending_actions": []
+            }
+            mock_sm.return_value.write = Mock()
+            mock_cfg.return_value.load.return_value = {
+                "action_intervals": {
+                    "defaults": {"pump": 15, "fan": 10, "default": 15}
+                }
+            }
+            return ActionExecutor(mock_relay_controller, device_config)
+
+    def test_first_action_allowed(self, executor):
+        """İlk aksiyon her zaman izin verilmeli (last_on_action_time=null)"""
+        is_allowed, reason = executor._check_action_interval("pump_01", "pump_on")
+        assert is_allowed is True
+        assert reason is None
+
+    def test_off_action_always_allowed(self, executor):
+        """OFF aksiyonları her zaman izin verilmeli (güvenlik)"""
+        # Even with recent ON action, OFF should be allowed
+        is_allowed, reason = executor._check_action_interval("pump_01", "pump_off")
+        assert is_allowed is True
+        assert reason is None
+
+    def test_on_action_blocked_within_interval(self, executor):
+        """Interval içinde ON aksiyonu engellenmeli"""
+        # Mock recent ON action (5 minutes ago)
+        recent_time = (datetime.utcnow() - timedelta(minutes=5)).isoformat() + "Z"
+
+        with patch('actions.executor.get_state_manager') as mock_sm:
+            mock_sm.return_value.read.return_value = {
+                "devices": {
+                    "pump_01": {"state": "on", "last_on_action_time": recent_time}
+                },
+                "pending_actions": []
+            }
+            executor.state_manager = mock_sm.return_value
+
+            is_allowed, reason = executor._check_action_interval("pump_01", "pump_on")
+
+            assert is_allowed is False
+            assert "Interval not met" in reason
+            assert "wait" in reason
+
+    def test_on_action_allowed_after_interval(self, executor):
+        """Interval geçtikten sonra ON aksiyonu izin verilmeli"""
+        # Mock old ON action (20 minutes ago, pump requires 15)
+        old_time = (datetime.utcnow() - timedelta(minutes=20)).isoformat() + "Z"
+
+        with patch('actions.executor.get_state_manager') as mock_sm:
+            mock_sm.return_value.read.return_value = {
+                "devices": {
+                    "pump_01": {"state": "off", "last_on_action_time": old_time}
+                },
+                "pending_actions": []
+            }
+            executor.state_manager = mock_sm.return_value
+
+            is_allowed, reason = executor._check_action_interval("pump_01", "pump_on")
+
+            assert is_allowed is True
+            assert reason is None
+
+    def test_different_devices_independent(self, executor):
+        """Farklı cihazlar bağımsız interval tracking"""
+        # pump_01 has recent action, fan_01 doesn't
+        recent_time = (datetime.utcnow() - timedelta(minutes=5)).isoformat() + "Z"
+
+        with patch('actions.executor.get_state_manager') as mock_sm:
+            mock_sm.return_value.read.return_value = {
+                "devices": {
+                    "pump_01": {"state": "on", "last_on_action_time": recent_time},
+                    "fan_01": {"state": "off", "last_on_action_time": None}
+                },
+                "pending_actions": []
+            }
+            executor.state_manager = mock_sm.return_value
+
+            # pump_01 should be blocked
+            pump_allowed, _ = executor._check_action_interval("pump_01", "pump_on")
+            assert pump_allowed is False
+
+            # fan_01 should be allowed (no prior action)
+            fan_allowed, _ = executor._check_action_interval("fan_01", "fan_on")
+            assert fan_allowed is True
+
+    def test_invalid_timestamp_allows_action(self, executor):
+        """Geçersiz timestamp ile aksiyon izin verilmeli (fail-open)"""
+        with patch('actions.executor.get_state_manager') as mock_sm:
+            mock_sm.return_value.read.return_value = {
+                "devices": {
+                    "pump_01": {"state": "off", "last_on_action_time": "invalid-timestamp"}
+                },
+                "pending_actions": []
+            }
+            executor.state_manager = mock_sm.return_value
+
+            is_allowed, reason = executor._check_action_interval("pump_01", "pump_on")
+
+            assert is_allowed is True  # fail-open
+            assert reason is None
+
+    @pytest.mark.asyncio
+    async def test_skipped_increments_stats(self, executor, mock_relay_controller):
+        """Skipped aksiyon stats'ı artırmalı"""
+        recent_time = (datetime.utcnow() - timedelta(minutes=5)).isoformat() + "Z"
+
+        with patch('actions.executor.get_state_manager') as mock_sm:
+            mock_sm.return_value.read.return_value = {
+                "devices": {
+                    "pump_01": {"state": "on", "last_on_action_time": recent_time}
+                },
+                "pending_actions": [
+                    {
+                        "id": "interval_test",
+                        "action": "pump_on",
+                        "device": "pump_01",
+                        "status": "pending"
+                    }
+                ]
+            }
+            mock_sm.return_value.write = Mock()
+            executor.state_manager = mock_sm.return_value
+
+            results = await executor.process_pending_actions()
+
+            assert len(results) == 1
+            assert results[0].status == ActionStatus.SKIPPED
+            assert executor.stats.skipped == 1
+
+    def test_is_on_action(self, executor):
+        """ON aksiyon tespiti"""
+        assert executor._is_on_action("pump_on") is True
+        assert executor._is_on_action("fan_on") is True
+        assert executor._is_on_action("pump_off") is False
+        assert executor._is_on_action("fan_off") is False
+        assert executor._is_on_action("none") is False
+
+    def test_get_device_interval_minutes(self, executor):
+        """Cihaz interval değerleri"""
+        # Default intervals from config
+        assert executor._get_device_interval_minutes("pump_01") == 15
+        assert executor._get_device_interval_minutes("pump_02") == 15
+        assert executor._get_device_interval_minutes("fan_01") == 10
+        assert executor._get_device_interval_minutes("fan_02") == 10
+        # Unknown device type should use default
+        assert executor._get_device_interval_minutes("unknown_device") == 15
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

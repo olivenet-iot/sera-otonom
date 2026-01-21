@@ -71,3 +71,14 @@ combined_rules:
       - device: "fan_01"
         action: "on"
         reason: "Cooling"
+
+# Aksiyon Aralık Ayarları (Action Intervals)
+# Aynı cihaz için ON aksiyonları arasında minimum süre (dakika)
+action_intervals:
+  defaults:
+    pump: 15    # Pompa için 15 dakika
+    fan: 10     # Fan için 10 dakika
+    default: 15 # Diğer cihazlar için varsayılan
+  # Device-specific overrides (opsiyonel):
+  # pump_01: 20
+  # fan_01: 5

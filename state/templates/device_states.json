@@ -4,6 +4,7 @@
     "pump_01": {
       "state": "off",
       "last_changed": null,
+      "last_on_action_time": null,
       "current_operation": null,
       "scheduled_off": null,
       "total_on_time_today_minutes": 0,
@@ -13,6 +14,7 @@
     "fan_01": {
       "state": "off",
       "last_changed": null,
+      "last_on_action_time": null,
       "current_operation": null,
       "scheduled_off": null,
       "total_on_time_today_minutes": 0,
