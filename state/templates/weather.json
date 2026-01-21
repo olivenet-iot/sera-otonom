@@ -1,0 +1,33 @@
+{
+  "timestamp": null,
+  "location": {
+    "name": "Lefkoşa, KKTC",
+    "lat": 35.1856,
+    "lon": 33.3823
+  },
+  "current": {
+    "temperature": null,
+    "humidity": null,
+    "conditions": null,
+    "wind_speed": null,
+    "clouds": null
+  },
+  "forecast": {
+    "today": {
+      "high": null,
+      "low": null,
+      "conditions": null,
+      "rain_probability": null
+    },
+    "tomorrow": {
+      "high": null,
+      "low": null,
+      "conditions": null,
+      "rain_probability": null
+    },
+    "next_3_days": []
+  },
+  "alerts": [],
+  "last_update": null,
+  "source": "openweathermap"
+}

@@ -1,0 +1,52 @@
+{
+  "timestamp": null,
+  "last_update": null,
+  "sensors": {
+    "temperature": {
+      "value": null,
+      "unit": "°C",
+      "status": "unknown",
+      "last_reading": null
+    },
+    "humidity": {
+      "value": null,
+      "unit": "%",
+      "status": "unknown",
+      "last_reading": null
+    },
+    "soil_moisture": {
+      "value": null,
+      "unit": "%",
+      "status": "unknown",
+      "last_reading": null
+    },
+    "light": {
+      "value": null,
+      "unit": "lux",
+      "status": "unknown",
+      "last_reading": null
+    }
+  },
+  "trends": {
+    "temperature": {
+      "direction": null,
+      "rate": null,
+      "samples": []
+    },
+    "humidity": {
+      "direction": null,
+      "rate": null,
+      "samples": []
+    },
+    "soil_moisture": {
+      "direction": null,
+      "rate": null,
+      "samples": []
+    }
+  },
+  "data_quality": {
+    "sensors_online": 0,
+    "sensors_total": 4,
+    "last_successful_read": null
+  }
+}

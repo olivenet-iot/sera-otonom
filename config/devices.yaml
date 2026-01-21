@@ -1,0 +1,84 @@
+# Sera Cihaz Tanımları
+
+sensors:
+  # Sıcaklık/Nem Sensörü
+  temp_humidity_01:
+    dev_eui: "${SENSOR_TEMP_HUM_EUI}"
+    device_id: "sera-temp-hum-01"
+    type: "temperature_humidity"
+    measurements:
+      - name: "temperature"
+        unit: "°C"
+        decoded_field: "temperature"
+        valid_range: [-10, 60]
+      - name: "humidity"
+        unit: "%"
+        decoded_field: "humidity"
+        valid_range: [0, 100]
+    location: "sera_ic"
+
+  # Toprak Nem Sensörü
+  soil_moisture_01:
+    dev_eui: "${SENSOR_SOIL_EUI}"
+    device_id: "sera-soil-01"
+    type: "soil_moisture"
+    measurements:
+      - name: "soil_moisture"
+        unit: "%"
+        decoded_field: "moisture"
+        valid_range: [0, 100]
+    location: "sera_ic"
+    depth_cm: 15
+
+  # Işık Sensörü
+  light_01:
+    dev_eui: "${SENSOR_LIGHT_EUI}"
+    device_id: "sera-light-01"
+    type: "light"
+    measurements:
+      - name: "light"
+        unit: "lux"
+        decoded_field: "illuminance"
+        valid_range: [0, 100000]
+    location: "sera_ic"
+
+relays:
+  # Su Pompası Relay
+  pump_01:
+    dev_eui: "${RELAY_PUMP_EUI}"
+    device_id: "sera-pump-01"
+    type: "relay"
+    control_type: "pump"
+    default_state: "off"
+    max_on_duration_minutes: 60
+    downlink_port: 1
+    commands:
+      "on": "AQ=="   # Base64 encoded
+      "off": "AA=="  # Base64 encoded
+
+  # Fan Relay
+  fan_01:
+    dev_eui: "${RELAY_FAN_EUI}"
+    device_id: "sera-fan-01"
+    type: "relay"
+    control_type: "fan"
+    default_state: "off"
+    max_on_duration_minutes: 120
+    downlink_port: 1
+    commands:
+      "on": "AQ=="
+      "off": "AA=="
+
+# Cihaz Grupları
+groups:
+  irrigation:
+    devices: ["pump_01"]
+    description: "Sulama sistemi"
+
+  ventilation:
+    devices: ["fan_01"]
+    description: "Havalandırma sistemi"
+
+  environment:
+    devices: ["temp_humidity_01", "light_01"]
+    description: "Ortam sensörleri"

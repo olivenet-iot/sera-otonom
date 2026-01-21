@@ -1,0 +1,10 @@
+{
+  "decisions": [],
+  "stats": {
+    "total_decisions": 0,
+    "today_decisions": 0,
+    "last_decision_id": null,
+    "average_confidence": null
+  },
+  "last_updated": null
+}

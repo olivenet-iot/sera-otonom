@@ -1,0 +1,58 @@
+# Sera Otonom - Ana Konfigürasyon
+app:
+  name: "Sera Otonom"
+  version: "0.1.0"
+  environment: "development"
+  log_level: "INFO"
+
+# TTS (The Things Stack) MQTT Ayarları
+# Tek MQTT bağlantısı hem uplink hem downlink için kullanılır
+tts:
+  mqtt:
+    broker: "${TTS_MQTT_BROKER}"
+    port: 8883
+    use_tls: true
+    username: "${TTS_MQTT_USERNAME}"  # format: app-id@tenant (e.g., sera-app@ttn)
+    password: "${TTS_MQTT_PASSWORD}"  # API key with MQTT access
+    app_id: "${TTS_APP_ID}"
+    keepalive: 60
+    qos: 1
+
+    # Topic patterns (reference only, code generates these)
+    # Uplink:   v3/{app_id}/devices/{device_id}/up
+    # Downlink: v3/{app_id}/devices/{device_id}/down/push
+
+# Hava Durumu API
+weather:
+  provider: "openweathermap"
+  api_key: "${WEATHER_API_KEY}"
+  location:
+    lat: 35.1856
+    lon: 33.3823
+  update_interval_minutes: 30
+
+# Brain Ayarları
+brain:
+  cycle_interval_seconds: 300
+  claude_timeout_seconds: 120
+  max_retries: 3
+
+  decision_limits:
+    max_pump_duration_minutes: 60
+    max_fan_duration_minutes: 120
+    min_action_interval_minutes: 15
+
+# UI Ayarları
+ui:
+  host: "0.0.0.0"
+  port: 8080
+  cors_origins:
+    - "http://localhost:3000"
+    - "http://localhost:8080"
+
+# Logging
+logging:
+  file: "logs/sera-otonom.log"
+  max_size_mb: 10
+  backup_count: 5
+  format: "%(asctime)s | %(levelname)s | %(name)s | %(message)s"

@@ -1,0 +1,25 @@
+{
+  "timestamp": null,
+  "devices": {
+    "pump_01": {
+      "state": "off",
+      "last_changed": null,
+      "current_operation": null,
+      "scheduled_off": null,
+      "total_on_time_today_minutes": 0,
+      "last_on_duration_minutes": null,
+      "error": null
+    },
+    "fan_01": {
+      "state": "off",
+      "last_changed": null,
+      "current_operation": null,
+      "scheduled_off": null,
+      "total_on_time_today_minutes": 0,
+      "last_on_duration_minutes": null,
+      "error": null
+    }
+  },
+  "pending_actions": [],
+  "last_downlink": null
+}

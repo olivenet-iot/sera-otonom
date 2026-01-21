@@ -1,0 +1,73 @@
+# Fallback Threshold'lar
+# AI karar veremezse veya offline modda kullanılır
+
+temperature:
+  unit: "°C"
+  optimal_range: [20, 28]
+  warning_low: 15
+  warning_high: 32
+  critical_low: 10
+  critical_high: 38
+
+  actions:
+    too_high:
+      - device: "fan_01"
+        action: "on"
+        condition: "temperature > 30"
+    too_low:
+      - device: "fan_01"
+        action: "off"
+        condition: "temperature < 25"
+
+humidity:
+  unit: "%"
+  optimal_range: [60, 80]
+  warning_low: 50
+  warning_high: 90
+  critical_low: 40
+  critical_high: 95
+
+  actions:
+    too_high:
+      - device: "fan_01"
+        action: "on"
+        condition: "humidity > 85"
+
+soil_moisture:
+  unit: "%"
+  optimal_range: [40, 70]
+  warning_low: 30
+  warning_high: 80
+  critical_low: 20
+  critical_high: 90
+
+  actions:
+    too_low:
+      - device: "pump_01"
+        action: "on"
+        duration_minutes: 15
+        condition: "soil_moisture < 30"
+    too_high:
+      - device: "pump_01"
+        action: "off"
+        condition: "soil_moisture > 75"
+
+light:
+  unit: "lux"
+  optimal_range: [500, 2000]
+  # Işık için otomatik aksiyon yok (sera örtüsü manuel)
+
+# Kombinasyon Kuralları
+combined_rules:
+  heat_stress:
+    conditions:
+      - "temperature > 32"
+      - "humidity < 50"
+    actions:
+      - device: "pump_01"
+        action: "on"
+        duration_minutes: 10
+        reason: "Heat stress prevention"
+      - device: "fan_01"
+        action: "on"
+        reason: "Cooling"
