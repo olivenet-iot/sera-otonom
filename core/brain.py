@@ -32,7 +32,8 @@ class SeraBrain:
         self,
         config_path: str = "config/settings.yaml",
         use_claude: bool = True,
-        use_fallback: bool = True
+        use_fallback: bool = True,
+        dry_run: bool = False
     ):
         """
         Brain'i başlat
@@ -41,10 +42,12 @@ class SeraBrain:
             config_path: Ana config dosyasının yolu
             use_claude: Claude Code kullanılsın mı?
             use_fallback: Claude başarısız olursa fallback kullanılsın mı?
+            dry_run: Komut göndermeden simüle et
         """
         self.config_path = config_path
         self.use_claude = use_claude
         self.use_fallback = use_fallback
+        self.dry_run = dry_run
 
         # Load configs
         self.config_loader = get_config_loader()
@@ -84,7 +87,10 @@ class SeraBrain:
         self._last_cycle_time: Optional[datetime] = None
         self._last_decision: Optional[ClaudeResponse] = None
 
-        logger.info("SeraBrain initialized")
+        if self.dry_run:
+            logger.info("SeraBrain initialized [DRY-RUN MODE]")
+        else:
+            logger.info("SeraBrain initialized")
 
     async def initialize(self) -> bool:
         """
@@ -140,7 +146,7 @@ class SeraBrain:
         if self.data_collector and hasattr(self.data_collector, 'mqtt'):
             mqtt_connector = self.data_collector.mqtt
 
-        self.relay_controller = RelayController(mqtt_connector, device_config)
+        self.relay_controller = RelayController(mqtt_connector, device_config, dry_run=self.dry_run)
         self.executor = ActionExecutor(self.relay_controller, device_config)
         logger.info("RelayController and ActionExecutor initialized")
 
@@ -482,6 +488,7 @@ class SeraBrain:
             "last_cycle_time": self._last_cycle_time.isoformat() if self._last_cycle_time else None,
             "use_claude": self.use_claude,
             "use_fallback": self.use_fallback,
+            "dry_run": self.dry_run,
             "config": {
                 "cycle_interval": self.cycle_interval,
                 "claude_timeout": self.claude_timeout

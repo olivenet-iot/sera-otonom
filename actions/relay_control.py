@@ -29,16 +29,18 @@ class RelayCommandResult:
 class RelayController:
     """Relay kontrolcü"""
 
-    def __init__(self, mqtt_connector, device_config: dict):
+    def __init__(self, mqtt_connector, device_config: dict, dry_run: bool = False):
         """
         Controller'ı başlat
 
         Args:
             mqtt_connector: TTS MQTT connector instance (send_relay_command metoduna sahip)
             device_config: Relay config (devices.yaml içeriği)
+            dry_run: Komut göndermeden simüle et
         """
         self.mqtt = mqtt_connector
         self.device_config = device_config
+        self.dry_run = dry_run
         self.state_manager = get_state_manager()
 
         # Scheduled off tasks: device_id -> asyncio.Task
@@ -47,7 +49,10 @@ class RelayController:
         # Safety defaults
         self._default_max_duration = 60  # minutes
 
-        logger.info("RelayController initialized")
+        if self.dry_run:
+            logger.info("RelayController initialized [DRY-RUN MODE]")
+        else:
+            logger.info("RelayController initialized")
 
     async def turn_on(
         self,
@@ -86,6 +91,16 @@ class RelayController:
 
         # Cancel any existing scheduled off for this device
         self._cancel_scheduled_off(device_id)
+
+        # Dry-run mode: simulate without sending command
+        if self.dry_run:
+            logger.info(f"[DRY-RUN] Would turn ON {device_id} (duration: {duration_minutes}m, reason: {reason})")
+            return RelayCommandResult(
+                success=True,
+                device_id=device_id,
+                command="on",
+                message=f"[DRY-RUN] Device {device_id} would be turned on" + (f" for {duration_minutes} minutes" if duration_minutes else "")
+            )
 
         # Send command via MQTT
         if self.mqtt:
@@ -179,6 +194,16 @@ class RelayController:
                 on_duration_minutes = (timestamp.replace(tzinfo=last_changed.tzinfo) - last_changed).total_seconds() / 60
             except (ValueError, TypeError):
                 pass
+
+        # Dry-run mode: simulate without sending command
+        if self.dry_run:
+            logger.info(f"[DRY-RUN] Would turn OFF {device_id} (was on for {on_duration_minutes:.1f}m, reason: {reason})" if on_duration_minutes else f"[DRY-RUN] Would turn OFF {device_id} (reason: {reason})")
+            return RelayCommandResult(
+                success=True,
+                device_id=device_id,
+                command="off",
+                message=f"[DRY-RUN] Device {device_id} would be turned off"
+            )
 
         # Send command via MQTT
         if self.mqtt:
