@@ -436,6 +436,82 @@ class TestSeraBrain:
         assert "not initialized" in result["error"].lower()
 
 
+# ==================== Daily Reset Tests ====================
+
+class TestDailyReset:
+    """Daily reset functionality tests"""
+
+    @pytest.fixture
+    def brain(self):
+        """Brain with Claude disabled"""
+        return SeraBrain(use_claude=False, use_fallback=True)
+
+    def test_calculate_seconds_until_midnight_valid_range(self, brain):
+        """Seconds until midnight should be between 0 and 86400"""
+        seconds = brain._calculate_seconds_until_midnight()
+
+        assert seconds > 0, "Seconds should be positive"
+        assert seconds <= 86400, "Seconds should not exceed 24 hours"
+
+    def test_calculate_seconds_until_midnight_type(self, brain):
+        """Return value should be an integer"""
+        seconds = brain._calculate_seconds_until_midnight()
+
+        assert isinstance(seconds, int), "Should return an integer"
+
+    @pytest.mark.asyncio
+    async def test_daily_reset_callback_calls_executor(self, brain):
+        """Callback should call executor.reset_daily_counters()"""
+        mock_executor = Mock()
+        mock_executor.reset_daily_counters = AsyncMock()
+        brain.executor = mock_executor
+
+        # Mock scheduler
+        brain.scheduler = Mock()
+        brain.scheduler.tasks = {"daily_reset": Mock(interval_seconds=3600)}
+
+        await brain._daily_reset_callback()
+
+        mock_executor.reset_daily_counters.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_daily_reset_callback_updates_interval(self, brain):
+        """Callback should update interval to 86400 after first run"""
+        mock_executor = Mock()
+        mock_executor.reset_daily_counters = AsyncMock()
+        brain.executor = mock_executor
+
+        # Mock scheduler with task
+        mock_task = Mock()
+        mock_task.interval_seconds = 3600  # Initial value
+        brain.scheduler = Mock()
+        brain.scheduler.tasks = {"daily_reset": mock_task}
+
+        await brain._daily_reset_callback()
+
+        assert mock_task.interval_seconds == 86400, "Interval should be set to 24 hours"
+
+    @pytest.mark.asyncio
+    async def test_daily_reset_callback_handles_no_executor(self, brain):
+        """Callback should handle executor=None gracefully"""
+        brain.executor = None
+        brain.scheduler = None
+
+        # Should not raise an exception
+        await brain._daily_reset_callback()
+
+    @pytest.mark.asyncio
+    async def test_daily_reset_callback_handles_exception(self, brain):
+        """Callback should handle exceptions gracefully"""
+        mock_executor = Mock()
+        mock_executor.reset_daily_counters = AsyncMock(side_effect=Exception("Test error"))
+        brain.executor = mock_executor
+        brain.scheduler = None
+
+        # Should not raise an exception
+        await brain._daily_reset_callback()
+
+
 # ==================== Integration-like Tests ====================
 
 class TestBrainIntegration:

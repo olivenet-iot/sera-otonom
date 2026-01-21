@@ -12,7 +12,7 @@ import logging
 import asyncio
 import uuid
 from typing import Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from .claude_runner import ClaudeRunner, ClaudeResponse, FallbackDecisionMaker
@@ -188,7 +188,38 @@ class SeraBrain:
             run_immediately=False
         )
 
+        # Daily reset task - resets counters at midnight
+        self.scheduler.add_task(
+            name="daily_reset",
+            callback=self._daily_reset_callback,
+            interval_seconds=self._calculate_seconds_until_midnight(),
+            run_immediately=False
+        )
+        logger.info(f"Daily reset task scheduled (first run in {self._calculate_seconds_until_midnight()} seconds)")
+
         logger.info("Scheduled tasks configured")
+
+    def _calculate_seconds_until_midnight(self) -> int:
+        """Calculate seconds until next midnight"""
+        now = datetime.now()
+        tomorrow = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        return int((tomorrow - now).total_seconds())
+
+    async def _daily_reset_callback(self) -> None:
+        """Daily reset callback - runs at midnight, then every 24 hours"""
+        logger.info("Daily reset triggered at midnight")
+
+        try:
+            if self.executor:
+                await self.executor.reset_daily_counters()
+                logger.info("Daily counters reset successfully")
+
+            # Update interval to 24 hours for subsequent runs
+            if self.scheduler and "daily_reset" in self.scheduler.tasks:
+                self.scheduler.tasks["daily_reset"].interval_seconds = 86400
+                logger.debug("Daily reset interval set to 24 hours")
+        except Exception as e:
+            logger.error(f"Daily reset failed: {e}")
 
     async def start(self) -> None:
         """Brain döngüsünü başlat"""
